@@ -1,39 +1,64 @@
-name: Build Balloon APK
+name: Build APK
 on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Godot
-        run: |
-          wget https://github.com/godotengine/godot/releases/download/4.1.3-stable/Godot_v4.1.3-stable_linux.x86_64.zip
-          unzip Godot_v4.1.3-stable_linux.x86_64.zip
-          chmod +x Godot_v4.1.3-stable_linux.x86_64
-
-      - name: Fix texture name
-        run: |
-          if [ -f "Normal 1.png" ]; then
-            mv "Normal 1.png" Normal1.png
-          fi
-
-      - name: Create project config
-        run: |
-          echo '[application]' > project.godot
-          echo 'run/main_scene="res://node_2d.tscn"' >> project.godot
-
-          echo '[preset.0]' > export_presets.cfg
-          echo 'name="Android"' >> export_presets.cfg
-          echo 'platform="Android"' >> export_presets.cfg
-          echo 'runnable=true' >> export_presets.cfg
-
-      - name: Build APK
-        run: |
-          ./Godot_v4.1.3-stable_linux.x86_64 --headless --export-debug "Android" game.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: balloon-game
-          path: game.apk
+    - uses: actions/checkout@v4
+    
+    - name: Install Godot and templates
+      run: |
+        # 1. Установить Godot
+        wget https://github.com/godotengine/godot/releases/download/4.1.3-stable/Godot_v4.1.3-stable_linux.x86_64.zip
+        unzip Godot_v4.1.3-stable_linux.x86_64.zip
+        chmod +x Godot_v4.1.3-stable_linux.x86_64
+        
+        # 2. Установить шаблоны Android
+        wget https://github.com/godotengine/godot/releases/download/4.1.3-stable/Godot_v4.1.3-stable_export_templates.tpz
+        mkdir -p ~/.local/share/godot/export_templates/4.1.3.stable
+        unzip Godot_v4.1.3-stable_export_templates.tpz -d ~/.local/share/godot/export_templates/4.1.3.stable/
+        
+    - name: Create required files
+      run: |
+        # Переименовать текстуру
+        [ -f "Normal 1.png" ] && mv "Normal 1.png" Normal1.png
+        
+        # Минимальный project.godot
+        echo '[application]' > project.godot
+        echo 'config/name="Balloon"' >> project.godot
+        echo 'run/main_scene="res://node_2d.tscn"' >> project.godot
+        
+        # Минимальный export_presets.cfg
+        echo '[preset.0]' > export_presets.cfg
+        echo 'name="Android"' >> export_presets.cfg
+        echo 'platform="Android"' >> export_presets.cfg
+        echo 'runnable=true' >> export_presets.cfg
+        echo 'embedded_android_sdk=true' >> export_presets.cfg
+        
+    - name: Build with verbose output
+      run: |
+        # Экспорт с подробным выводом
+        ./Godot_v4.1.3-stable_linux.x86_64 --verbose --headless --export-debug "Android" output.apk 2>&1 | tee build.log
+        
+        # Проверить что создалось
+        echo "=== Files after build ==="
+        ls -la
+        
+    - name: Upload if exists
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: app
+        path: output.apk
+        
+    - name: Debug if failed
+      if: failure()
+      run: |
+        echo "=== Build log (last 50 lines) ==="
+        tail -50 build.log
+        echo "=== Project files ==="
+        ls -la
+        echo "=== File contents ==="
+        cat project.godot
+        cat export_presets.cfg
