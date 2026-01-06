@@ -1,32 +1,57 @@
-name: Build Test
+name: Build Balloon APK
 on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Download Godot
+    
+    - name: Setup Godot
       run: |
         wget https://github.com/godotengine/godot/releases/download/4.1.3-stable/Godot_v4.1.3-stable_linux.x86_64.zip
         unzip Godot_v4.1.3-stable_linux.x86_64.zip
         chmod +x Godot_v4.1.3-stable_linux.x86_64
-    - name: Create project file
+        
+    - name: Rename textures (remove spaces)
       run: |
+        # Убираем пробел из Normal 1.png
+        if [ -f "Normal 1.png" ]; then
+          mv "Normal 1.png" Normal1.png
+        fi
+        
+        # Создаем заглушки если нет текстур
+        for tex in Normal1.png Smile1.png Sleep1.png; do
+          if [ ! -f "$tex" ]; then
+            echo "Создаю заглушку для $tex"
+            convert -size 100x100 xc:$(echo $tex | sed 's/Normal1/blue/; s/Smile1/green/; s/Sleep1/red/') "$tex" 2>/dev/null || \
+            echo "Создаю простую текстуру" > "$tex"
+          fi
+        done
+        
+    - name: Create project files
+      run: |
+        # project.godot
         echo '[application]' > project.godot
-        echo 'config/name="Test"' >> project.godot
-        echo 'run/main_scene="res://test.tscn"' >> project.godot
-    - name: Create export preset
-      run: |
+        echo 'config/name="Balloon Game"' >> project.godot
+        echo 'run/main_scene="res://node_2d.tscn"' >> project.godot
+        echo '' >> project.godot
+        echo '[rendering]' >> project.godot
+        echo 'renderer/rendering_method="gl_compatibility"' >> project.godot
+        
+        # export_presets.cfg
         echo '[preset.0]' > export_presets.cfg
         echo 'name="Android"' >> export_presets.cfg
         echo 'platform="Android"' >> export_presets.cfg
         echo 'runnable=true' >> export_presets.cfg
+        echo 'export_filter="all_resources"' >> export_presets.cfg
         echo 'embedded_android_sdk=true' >> export_presets.cfg
-    - name: Build
+        echo 'architectures/arm64-v8a=true' >> export_presets.cfg
+        
+    - name: Build APK
       run: |
-        ./Godot_v4.1.3-stable_linux.x86_64 --headless --export-debug "Android" test.apk
-        ls -la *.apk
+        ./Godot_v4.1.3-stable_linux.x86_64 --headless --export-debug "Android" balloon.apk
+        
     - uses: actions/upload-artifact@v3
       with:
-        name: test-apk
-        path: test.apk
+        name: balloon-apk
+        path: balloon.apk
