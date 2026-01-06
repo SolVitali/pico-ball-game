@@ -1,89 +1,73 @@
 extends CharacterBody2D
 
-# === НАСТРОЙКИ ДВИЖЕНИЯ ===
-var speed = 100      # Скорость движения шарика (пикселей в секунду)
-var angle = 0        # Текущий угол на окружности (0-360 градусов)
-var radius = 50      # Радиус круговой траектории (пикселей)
+# === НАСТРОЙКИ ===
+var speed = 100.0
+var angle = 0.0
+var radius = 50.0
+var center = Vector2.ZERO
 
-# === ФИЗИЧЕСКИЙ ПРОЦЕСС (вызывается 60 раз в секунду) ===
-func _physics_process(delta):
-	# Время между кадрами: если игра работает на 60 FPS
-	# delta ≈ 0.0167 секунды (1 / 60)
-	angle += delta * 2  # Каждый кадр увеличиваем угол для вращения
-	# За 1 секунду: 0.0334 * 60 ≈ 2 радиана
-	# Это примерно 114 градусов в секунду
-	# Через 3 секунды угол станет: 0 + 2*3 = 6 радиан
-	# В круге 2π радиан ≈ 6.28, значит почти полный круг за 3 секунды
-
-	# Вычисляем новую позицию на окружности:
-	# sin(угол) * радиус = координата X
-	# cos(угол) * радиус = координата Y
-	var new_position = Vector2(
-		sin(angle) * radius,  # X координата
-		cos(angle) * radius   # Y координата
-	)
-	
-	# Устанавливаем скорость и двигаем шарик
-	velocity = new_position * speed * delta  # velocity - встроенная переменная CharacterBody2D
-	move_and_slide()  # Метод для движения с физикой и столкновениями
-
-# === ОБРАБОТКА ВВОДА (мышь, клавиатура) ===
-func _input(event):
-	# Проверяем: была ли нажата левая кнопка мыши?
-	if event is InputEventMouseButton and event.pressed and event.button_index == 1:  # 1 = левая кнопка мыши
-		var mouse_pos = get_global_mouse_position()  # Получаем глобальные координаты мыши
-		
-		# Преобразуем глобальные координаты мыши в локальные относительно спрайта
-		# affine_inverse() "переворачивает" преобразование координат
-		var local_mouse_pos = $Sprite2D.get_global_transform().affine_inverse() * mouse_pos
-		
-		# Проверяем, находится ли точка клика внутри прямоугольника спрайта
-		if $Sprite2D.get_rect().has_point(local_mouse_pos):
-			# Если да - запускаем анимацию
-			$AnimationPlayer.play("happy_click")
-			print("Анимация запущена!")  # Вывод в консоль для отладки
-		else:
-			print("Клик мимо шарика!")  # Для отладки
-
-# === ПОДГОТОВКА ПРИ ЗАПУСКЕ ===
+# === ЗАПУСК ===
 func _ready():
-	# Создаем отдельную анимацию для клика
-	create_click_animation()
-	print("Шарик инициализирован!")  # Сообщение в консоль при запуске
-
-# === СОЗДАНИЕ АНИМАЦИИ ДЛЯ КЛИКА ===
-func create_click_animation():
-	# 1. СОЗДАЕМ НОВУЮ АНИМАЦИЮ
-	var anim = Animation.new()  # Создаем пустую анимацию
-	anim.length = 1  # Устанавливаем длительность: 0.5 секунды
+	center = position
+	print("✅ Balloon ready")
 	
-	# 2. СОЗДАЕМ ДОРОЖКУ (track) ДЛЯ СВОЙСТВА "ТЕКСТУРА"
-	# TYPE_VALUE - тип дорожки для обычных значений (текстур, чисел, цветов)
+	# СОЗДАЕМ Sprite2D если его нет
+	if not has_node("Sprite2D"):
+		var sprite = Sprite2D.new()
+		sprite.name = "Sprite2D"
+		add_child(sprite)
+		sprite.texture = load("res://Normal1.png")  # Без пробела!
+	
+	# СОЗДАЕМ AnimationPlayer если его нет
+	if not has_node("AnimationPlayer"):
+		var anim_player = AnimationPlayer.new()
+		anim_player.name = "AnimationPlayer"
+		add_child(anim_player)
+	
+	# Создаём анимацию
+	create_click_animation()
+
+# === ДВИЖЕНИЕ ===
+func _physics_process(delta):
+	angle += delta * 2.0
+	position.x = center.x + sin(angle) * radius
+	position.y = center.y + cos(angle) * radius
+
+# === КЛИК ===
+func _input(event):
+	if event is InputEventMouseButton and event.pressed and event.button_index == 1:
+		var mouse_pos = get_global_mouse_position()
+		var sprite = $Sprite2D
+		
+		# Простая проверка расстояния (вместо сложного преобразования)
+		if position.distance_to(mouse_pos) < radius * 2:
+			$AnimationPlayer.play("happy_click")
+			print("Анимация запущена!")
+
+# === АНИМАЦИЯ ===
+func create_click_animation():
+	var anim = Animation.new()
+	anim.length = 1.0
+	
+	# Дорожка для текстуры
 	var track_idx = anim.add_track(Animation.TYPE_VALUE)
-	# Указываем путь к свойству: узел Sprite2D, свойство "texture"
 	anim.track_set_path(track_idx, "Sprite2D:texture")
 	
-	# 3. ДОБАВЛЯЕМ КЛЮЧЕВЫЕ КАДРЫ (keyframes) НА ДОРОЖКУ
-	# Время 0.0 сек: Normal 1.png - обычное состояние
-	anim.track_insert_key(track_idx, 0.0, load("res://Normal 1.png"))
-	# Время 0.2 сек: Smile1.png - улыбка (через 0.2 секунды)
-	anim.track_insert_key(track_idx, 0.3, load("res://Smile1.png"))
-	# Время 0.4 сек: Sleep1.png - сонное состояние (через 0.4 секунды)
-	anim.track_insert_key(track_idx, 0.6, load("res://Sleep1.png"))
-	# Время 0.6 сек: Normal.png - сонное состояние (через 0.4 секунды)
-	anim.track_insert_key(track_idx, 0.9, load("res://Normal 1.png"))
-
-	# 4. ДОБАВЛЯЕМ АНИМАЦИЮ В ANIMATIONPLAYER
-	# get_animation_library("") - получаем основную библиотеку анимаций
-	# add_animation() - добавляем анимацию с именем "happy_click"
-	$AnimationPlayer.get_animation_library("").add_animation("happy_click", anim)
+	# Загружаем текстуры (с проверкой)
+	var tex1 = load("res://Normal1.png") if ResourceLoader.exists("res://Normal1.png") else null
+	var tex2 = load("res://Smile1.png") if ResourceLoader.exists("res://Smile1.png") else null
+	var tex3 = load("res://Sleep1.png") if ResourceLoader.exists("res://Sleep1.png") else null
 	
-	print("Анимация 'happy_click' создана успешно!")  # Подтверждение создания
-
-# === ВАЖНЫЕ МОМЕНТЫ ДЛЯ ПОНИМАНИЯ: ===
-# 1. delta - время между кадрами (примерно 0.016 сек при 60 FPS)
-# 2. Vector2 - тип данных для 2D векторов (x, y)
-# 3. $Sprite2D - короткая запись для get_node("Sprite2D")
-# 4. load() - загружает ресурс (текстуру) во время выполнения
-# 5. move_and_slide() - учитывает физику и столкновения
-# 6. CharacterBody2D - специальный тип узла для персонажей с физикой
+	# Ключевые кадры (с проверкой на null)
+	if tex1:
+		anim.track_insert_key(track_idx, 0.0, tex1)
+	if tex2:
+		anim.track_insert_key(track_idx, 0.3, tex2)
+	if tex3:
+		anim.track_insert_key(track_idx, 0.6, tex3)
+	if tex1:
+		anim.track_insert_key(track_idx, 0.9, tex1)
+	
+	# Добавляем анимацию
+	$AnimationPlayer.add_animation("happy_click", anim)
+	print("Анимация создана")
