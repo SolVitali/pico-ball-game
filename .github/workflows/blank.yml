@@ -1,4 +1,4 @@
-name: Build Balloon APK for Pico-4
+name: Build Balloon APK
 
 on: [push]
 
@@ -7,107 +7,63 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    # 1. Скачать код
     - uses: actions/checkout@v3
     
-    # 2. Установить Godot 4.1.3
     - name: Setup Godot
       run: |
         wget -q https://github.com/godotengine/godot/releases/download/4.1.3-stable/Godot_v4.1.3-stable_linux.x86_64.zip
         unzip -q Godot_v4.1.3-stable_linux.x86_64.zip
         chmod +x Godot_v4.1.3-stable_linux.x86_64
+        mv Godot_v4.1.3-stable_linux.x86_64 godot
         
-    # 3. ПЕРЕИМЕНОВАТЬ СЦЕНУ (простая версия)
-    - name: Prepare scene
+    - name: Show files before
       run: |
-        if [ -f "node_2d.tscn" ]; then
-          cp node_2d.tscn main.tscn
-        else
-          # Создать простую сцену
+        echo "=== ФАЙЛЫ В ПРОЕКТЕ ==="
+        ls -la
+        echo "=== ТЕКСТУРЫ ==="
+        ls -la *.png 2>/dev/null || echo "Нет текстур"
+        
+    - name: Create minimal project
+      run: |
+        # Если нет сцены - создать
+        if [ ! -f "main.tscn" ]; then
           echo '[gd_scene load_steps=2 format=3]' > main.tscn
           echo '' >> main.tscn
-          echo '[ext_resource type="Script" path="res://baloon.gd" id="1_balloon"]' >> main.tscn
+          echo '[ext_resource type="Script" path="res://baloon.gd" id="1"]' >> main.tscn
           echo '' >> main.tscn
-          echo '[node name="Balloon" type="Node2D"]' >> main.tscn
-          echo 'script = ExtResource("1_balloon")' >> main.tscn
+          echo '[node name="Main" type="Node2D"]' >> main.tscn
+          echo 'script = ExtResource("1")' >> main.tscn
         fi
         
-    # 4. ПРОВЕРИТЬ ТЕКСТУРЫ (упрощённо)
-    - name: Check textures
-      run: |
-        # Просто проверяем что файлы существуют
-        echo "Проверка текстур..."
-        ls -la *.png 2>/dev/null || echo "Нет PNG файлов"
-        
-    # 5. СОЗДАТЬ ФАЙЛ ПРОЕКТА (без heredoc)
-    - name: Create project config
-      run: |
+        # Создать project.godot
         echo '[application]' > project.godot
         echo 'config/name="Balloon Game"' >> project.godot
         echo 'run/main_scene="res://main.tscn"' >> project.godot
-        echo '' >> project.godot
-        echo '[rendering]' >> project.godot
-        echo 'renderer/rendering_method="gl_compatibility"' >> project.godot
-        echo '' >> project.godot
-        echo '[display]' >> project.godot
-        echo 'window/size/width=1920' >> project.godot
-        echo 'window/size/height=1080' >> project.godot
-        echo 'window/size/mode="fullscreen"' >> project.godot
-        echo 'window/vsync/vsync_mode="enabled"' >> project.godot
-        echo '' >> project.godot
-        echo '[input]' >> project.godot
-        echo 'ui_accept={"deadzone": 0.5, "events": [{"type": 1}]}' >> project.godot
-        echo 'trigger_click={"deadzone": 0.5, "events": [{"type": 1}]}' >> project.godot
         
-        # Создать иконку
-        echo '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">' > icon.svg
-        echo '  <circle cx="64" cy="64" r="60" fill="#4ecdc4"/>' >> icon.svg
-        echo '  <circle cx="48" cy="48" r="8" fill="#fff"/>' >> icon.svg
-        echo '  <circle cx="80" cy="48" r="8" fill="#fff"/>' >> icon.svg
-        echo '  <path d="M48 90 Q64 110 80 90" stroke="#fff" stroke-width="6" fill="none"/>' >> icon.svg
-        echo '</svg>' >> icon.svg
-        
-    # 6. СОЗДАТЬ НАСТРОЙКИ ЭКСПОРТА (без heredoc)
-    - name: Create export preset
+    - name: Build APK (debug mode)
       run: |
-        echo '[preset.0]' > export_presets.cfg
-        echo 'name="Android"' >> export_presets.cfg
-        echo 'platform="Android"' >> export_presets.cfg
-        echo 'runnable=true' >> export_presets.cfg
-        echo 'export_filter="all_resources"' >> export_presets.cfg
-        echo 'custom_template=""' >> export_presets.cfg
-        echo 'embedded_android_sdk=true' >> export_presets.cfg
-        echo 'architectures/arm64-v8a=true' >> export_presets.cfg
-        echo 'architectures/armeabi-v7a=false' >> export_presets.cfg
-        echo '' >> export_presets.cfg
-        echo '[preset.0.options]' >> export_presets.cfg
-        echo 'application/package="com.pico.balloon"' >> export_presets.cfg
-        echo 'application/version="1"' >> export_presets.cfg
-        echo 'application/version_code="1"' >> export_presets.cfg
-        echo 'application/icon="res://icon.svg"' >> export_presets.cfg
-        echo 'application/xr_features/openxr=true' >> export_presets.cfg
-        echo 'graphics/api=1' >> export_presets.cfg
-        echo 'xr/openxr/enabled=true' >> export_presets.cfg
-        echo 'xr/openxr/form_factor=1' >> export_presets.cfg
+        # Пробуем debug экспорт
+        ./godot --headless --export-debug "Android" app.apk 2>&1 | tee build.log
         
-    # 7. СОБРАТЬ APK
-    - name: Build APK
-      run: |
-        ./Godot_v4.1.3-stable_linux.x86_64 --headless --export-release "Android" balloon-pico.apk
+        echo "=== ПРОВЕРКА APK ==="
+        if [ -f "app.apk" ]; then
+          echo "✅ APK создан! Размер: $(du -h app.apk | cut -f1)"
+        else
+          echo "❌ APK не создан! Логи:"
+          cat build.log | tail -50
+        fi
         
-    # 8. ЗАГРУЗИТЬ APK
-    - name: Upload APK
-      if: success()
+    - name: Upload APK if exists
       uses: actions/upload-artifact@v4
+      if: success()
       with:
-        name: Balloon-Pico-APK
-        path: balloon-pico.apk
+        name: balloon-app
+        path: app.apk
         
-    # 9. ЕСЛИ ОШИБКА - показать логи
     - name: Debug info
       if: failure()
       run: |
-        echo "=== ДЕБАГ ИНФОРМАЦИЯ ==="
-        ls -la
+        echo "=== ПОЛНЫЕ ЛОГИ ==="
+        cat build.log 2>/dev/null || echo "Нет логов"
         echo "=== СОДЕРЖИМОЕ ФАЙЛОВ ==="
-        head -20 *.gd *.tscn 2>/dev/null || true
+        head -30 *.gd 2>/dev/null || echo "Нет скриптов"
