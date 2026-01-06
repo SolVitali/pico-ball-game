@@ -17,120 +17,97 @@ jobs:
         unzip -q Godot_v4.1.3-stable_linux.x86_64.zip
         chmod +x Godot_v4.1.3-stable_linux.x86_64
         
-    # 3. ПРОВЕРИТЬ ТЕКСТУРЫ (создать заглушки если нет)
-    - name: Check textures
-      run: |
-        # Создать заглушки если текстур нет
-        for tex in "Normal 1.png" "Sleep1.png" "Smile1.png"; do
-          if [ ! -f "$tex" ]; then
-            echo "⚠️  Нет текстуры: $tex. Создаю заглушку..."
-            # Создать цветной PNG заглушку (100x100)
-            convert -size 100x100 xc:"$(echo $tex | sed 's/.*1/SkyBlue/; s/.*Sleep/DarkSlateBlue/; s/.*Smile/Gold/')" "$tex" 2>/dev/null || \
-            echo "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAA" | base64 -d > "$tex" 2>/dev/null || true
-          fi
-        done
-        
-        # Переименовать если есть пробелы (Normal 1.png → Normal1.png)
-        if [ -f "Normal 1.png" ]; then
-          cp "Normal 1.png" Normal1.png
-        fi
-        
-    # 4. ОБНОВИТЬ СКРИПТ baloon.gd (если ссылается на Normal 1.png)
-    - name: Fix script texture paths
-      run: |
-        if [ -f "baloon.gd" ]; then
-          # Заменить пути к текстурам в коде
-          sed -i 's/"res:\/\/Normal 1\.png"/"res:\/\/Normal1.png"/g' baloon.gd
-          sed -i 's/Normal 1\.png/Normal1.png/g' baloon.gd
-        fi
-        
-    # 5. ПЕРЕИМЕНОВАТЬ СЦЕНУ (node_2d.tscn → main.tscn)
+    # 3. ПЕРЕИМЕНОВАТЬ СЦЕНУ (простая версия)
     - name: Prepare scene
       run: |
         if [ -f "node_2d.tscn" ]; then
           cp node_2d.tscn main.tscn
-          # Исправить ссылки в сцене
-          sed -i 's/res:\/\/node_2d\.tscn/res:\/\/main\.tscn/g' main.tscn
         else
-          # Создать простую сцену если нет
-          cat > main.tscn << 'EOF'
-          [gd_scene load_steps=2 format=3]
-          
-          [ext_resource type="Script" path="res://baloon.gd" id="1_balloon"]
-          
-          [node name="Balloon" type="Node2D"]
-          script = ExtResource("1_balloon")
-          EOF
+          # Создать простую сцену
+          echo '[gd_scene load_steps=2 format=3]' > main.tscn
+          echo '' >> main.tscn
+          echo '[ext_resource type="Script" path="res://baloon.gd" id="1_balloon"]' >> main.tscn
+          echo '' >> main.tscn
+          echo '[node name="Balloon" type="Node2D"]' >> main.tscn
+          echo 'script = ExtResource("1_balloon")' >> main.tscn
         fi
         
-    # 6. СОЗДАТЬ ФАЙЛ ПРОЕКТА
+    # 4. ПРОВЕРИТЬ ТЕКСТУРЫ (упрощённо)
+    - name: Check textures
+      run: |
+        # Просто проверяем что файлы существуют
+        echo "Проверка текстур..."
+        ls -la *.png 2>/dev/null || echo "Нет PNG файлов"
+        
+    # 5. СОЗДАТЬ ФАЙЛ ПРОЕКТА (без heredoc)
     - name: Create project config
       run: |
-        cat > project.godot << 'EOF'
-        [application]
-        config/name="Balloon Game"
-        run/main_scene="res://main.tscn"
-        
-        [rendering]
-        renderer/rendering_method="gl_compatibility"
-        
-        [display]
-        window/size/width=1920
-        window/size/height=1080
-        window/size/mode="fullscreen"
-        window/vsync/vsync_mode="enabled"
-        
-        [input]
-        ui_accept={"deadzone": 0.5, "events": [{"type": 1}]}
-        trigger_click={"deadzone": 0.5, "events": [{"type": 1}]}
-        
-        [android]
-        modules/org/godotengine/openxr/OpenXR="*"
-        EOF
+        echo '[application]' > project.godot
+        echo 'config/name="Balloon Game"' >> project.godot
+        echo 'run/main_scene="res://main.tscn"' >> project.godot
+        echo '' >> project.godot
+        echo '[rendering]' >> project.godot
+        echo 'renderer/rendering_method="gl_compatibility"' >> project.godot
+        echo '' >> project.godot
+        echo '[display]' >> project.godot
+        echo 'window/size/width=1920' >> project.godot
+        echo 'window/size/height=1080' >> project.godot
+        echo 'window/size/mode="fullscreen"' >> project.godot
+        echo 'window/vsync/vsync_mode="enabled"' >> project.godot
+        echo '' >> project.godot
+        echo '[input]' >> project.godot
+        echo 'ui_accept={"deadzone": 0.5, "events": [{"type": 1}]}' >> project.godot
+        echo 'trigger_click={"deadzone": 0.5, "events": [{"type": 1}]}' >> project.godot
         
         # Создать иконку
-        cat > icon.svg << 'EOF'
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-          <circle cx="64" cy="64" r="60" fill="#4ecdc4"/>
-          <circle cx="48" cy="48" r="8" fill="#fff"/>
-          <circle cx="80" cy="48" r="8" fill="#fff"/>
-          <path d="M48 90 Q64 110 80 90" stroke="#fff" stroke-width="6" fill="none"/>
-        </svg>
-        EOF
+        echo '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">' > icon.svg
+        echo '  <circle cx="64" cy="64" r="60" fill="#4ecdc4"/>' >> icon.svg
+        echo '  <circle cx="48" cy="48" r="8" fill="#fff"/>' >> icon.svg
+        echo '  <circle cx="80" cy="48" r="8" fill="#fff"/>' >> icon.svg
+        echo '  <path d="M48 90 Q64 110 80 90" stroke="#fff" stroke-width="6" fill="none"/>' >> icon.svg
+        echo '</svg>' >> icon.svg
         
-    # 7. СОЗДАТЬ НАСТРОЙКИ ЭКСПОРТА
+    # 6. СОЗДАТЬ НАСТРОЙКИ ЭКСПОРТА (без heredoc)
     - name: Create export preset
       run: |
-        cat > export_presets.cfg << 'EOF'
-        [preset.0]
-        name="Android"
-        platform="Android"
-        runnable=true
-        export_filter="all_resources"
-        custom_template=""
-        embedded_android_sdk=true
-        architectures/arm64-v8a=true
-        architectures/armeabi-v7a=false
+        echo '[preset.0]' > export_presets.cfg
+        echo 'name="Android"' >> export_presets.cfg
+        echo 'platform="Android"' >> export_presets.cfg
+        echo 'runnable=true' >> export_presets.cfg
+        echo 'export_filter="all_resources"' >> export_presets.cfg
+        echo 'custom_template=""' >> export_presets.cfg
+        echo 'embedded_android_sdk=true' >> export_presets.cfg
+        echo 'architectures/arm64-v8a=true' >> export_presets.cfg
+        echo 'architectures/armeabi-v7a=false' >> export_presets.cfg
+        echo '' >> export_presets.cfg
+        echo '[preset.0.options]' >> export_presets.cfg
+        echo 'application/package="com.pico.balloon"' >> export_presets.cfg
+        echo 'application/version="1"' >> export_presets.cfg
+        echo 'application/version_code="1"' >> export_presets.cfg
+        echo 'application/icon="res://icon.svg"' >> export_presets.cfg
+        echo 'application/xr_features/openxr=true' >> export_presets.cfg
+        echo 'graphics/api=1' >> export_presets.cfg
+        echo 'xr/openxr/enabled=true' >> export_presets.cfg
+        echo 'xr/openxr/form_factor=1' >> export_presets.cfg
         
-        [preset.0.options]
-        application/package="com.pico.balloon"
-        application/version="1"
-        application/version_code="1"
-        application/icon="res://icon.svg"
-        application/xr_features/openxr=true
-        graphics/api=1
-        xr/openxr/enabled=true
-        xr/openxr/form_factor=1
-        EOF
-        
-    # 8. СОБРАТЬ APK
+    # 7. СОБРАТЬ APK
     - name: Build APK
       run: |
         ./Godot_v4.1.3-stable_linux.x86_64 --headless --export-release "Android" balloon-pico.apk
         
-    # 9. ЗАГРУЗИТЬ APK
+    # 8. ЗАГРУЗИТЬ APK
     - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: Balloon-Pico-APK
         path: balloon-pico.apk
+        
+    # 9. ЕСЛИ ОШИБКА - показать логи
+    - name: Debug info
+      if: failure()
+      run: |
+        echo "=== ДЕБАГ ИНФОРМАЦИЯ ==="
+        ls -la
+        echo "=== СОДЕРЖИМОЕ ФАЙЛОВ ==="
+        head -20 *.gd *.tscn 2>/dev/null || true
