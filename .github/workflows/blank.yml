@@ -1,6 +1,6 @@
 name: Build APK for Pico-4
 
-on: [push]  # Собирать при каждом пуше
+on: [push]
 
 jobs:
   build:
@@ -8,17 +8,72 @@ jobs:
     
     steps:
     # 1. Скачать код
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    # 2. Установить Godot
+    - uses: actions/checkout@v3
+    
+    # 2. Установить Godot 4.2.1 (РАБОЧАЯ ССЫЛКА)
     - name: Setup Godot
       run: |
-        wget https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_linux.x86_64
+        # Скачать Godot 4.2.1 (правильная ссылка)
+        wget https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_linux.x86_64.zip
+        unzip Godot_v4.2.1-stable_linux.x86_64.zip
         chmod +x Godot_v4.2.1-stable_linux.x86_64
-        mv Godot_v4.2.1-stable_linux.x86_64 godot
         
-    # 3. Создать настройки экспорта
+    # 3. Создать файл проекта
+    - name: Create project files
+      run: |
+        # Создать project.godot
+        cat > project.godot << 'EOF'
+        [application]
+        config/name="Ball Game"
+        config/icon="res://icon.svg"
+        
+        [rendering]
+        renderer/rendering_method="mobile"
+        
+        [display]
+        window/size/width=1920
+        window/size/height=1080
+        window/size/mode="fullscreen"
+        EOF
+        
+    # 4. Создать простой скрипт если нет
+    - name: Create default script if missing
+      run: |
+        if [ ! -f "ball.gd" ]; then
+          cat > ball.gd << 'EOF'
+          extends Node2D
+          
+          var angle = 0.0
+          
+          func _ready():
+              print("Ball Game for Pico-4")
+              
+          func _process(delta):
+              angle += delta * 2
+              queue_redraw()
+              
+          func _draw():
+              var x = 400 + sin(angle) * 100
+              var y = 300 + cos(angle) * 100
+              draw_circle(Vector2(x, y), 50, Color.RED)
+          EOF
+        fi
+        
+    # 5. Создать сцену если нет
+    - name: Create default scene if missing
+      run: |
+        if [ ! -f "ball.tscn" ]; then
+          cat > ball.tscn << 'EOF'
+          [gd_scene load_steps=2 format=3 uid="uid://test"]
+          
+          [ext_resource type="Script" path="res://ball.gd" id="1_ball"]
+          
+          [node name="Ball" type="Node2D"]
+          script = ExtResource("1_ball")
+          EOF
+        fi
+        
+    # 6. Создать настройки экспорта
     - name: Create export preset
       run: |
         cat > export_presets.cfg << 'EOF'
@@ -26,29 +81,26 @@ jobs:
         name="Android"
         platform="Android"
         runnable=true
+        export_filter="all_resources"
         custom_template=""
         embedded_android_sdk=true
         architectures/arm64-v8a=true
-        architectures/armeabi-v7a=false
-        export_filter="all_resources"
-        keystore/debug="user://android_debug.keystore"
-        keystore/debug_user="androiddebugkey"
-        keystore/debug_password="android"
         
         [preset.0.options]
+        application/package="com.pico.ball"
+        application/version="1"
+        application/version_code="1"
         XR/OpenXR/Enabled=true
-        XR/OpenXR/Form Factor="HMD"
         EOF
         
-    # 4. Собрать APK
+    # 7. Собрать APK
     - name: Build APK
       run: |
-        ./godot --headless --export-release "Android" ball-game.apk
+        ./Godot_v4.2.1-stable_linux.x86_64 --headless --export-release "Android" ball-game.apk
         
-    # 5. Загрузить APK как артефакт
+    # 8. Загрузить APK
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Ball-Game-APK
         path: ball-game.apk
-        retention-days: 7
