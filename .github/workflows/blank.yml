@@ -1,4 +1,4 @@
-name: Build APK for Pico-4
+name: Build Balloon APK for Pico-4
 
 on: [push]
 
@@ -10,70 +10,95 @@ jobs:
     # 1. Скачать код
     - uses: actions/checkout@v3
     
-    # 2. Установить Godot 4.2.1 (РАБОЧАЯ ССЫЛКА)
+    # 2. Установить Godot 4.1.3
     - name: Setup Godot
       run: |
-        # Скачать Godot 4.2.1 (правильная ссылка)
-        wget https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_linux.x86_64.zip
-        unzip Godot_v4.2.1-stable_linux.x86_64.zip
-        chmod +x Godot_v4.2.1-stable_linux.x86_64
+        wget -q https://github.com/godotengine/godot/releases/download/4.1.3-stable/Godot_v4.1.3-stable_linux.x86_64.zip
+        unzip -q Godot_v4.1.3-stable_linux.x86_64.zip
+        chmod +x Godot_v4.1.3-stable_linux.x86_64
         
-    # 3. Создать файл проекта
-    - name: Create project files
+    # 3. ПРОВЕРИТЬ ТЕКСТУРЫ (создать заглушки если нет)
+    - name: Check textures
       run: |
-        # Создать project.godot
+        # Создать заглушки если текстур нет
+        for tex in "Normal 1.png" "Sleep1.png" "Smile1.png"; do
+          if [ ! -f "$tex" ]; then
+            echo "⚠️  Нет текстуры: $tex. Создаю заглушку..."
+            # Создать цветной PNG заглушку (100x100)
+            convert -size 100x100 xc:"$(echo $tex | sed 's/.*1/SkyBlue/; s/.*Sleep/DarkSlateBlue/; s/.*Smile/Gold/')" "$tex" 2>/dev/null || \
+            echo "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAA" | base64 -d > "$tex" 2>/dev/null || true
+          fi
+        done
+        
+        # Переименовать если есть пробелы (Normal 1.png → Normal1.png)
+        if [ -f "Normal 1.png" ]; then
+          cp "Normal 1.png" Normal1.png
+        fi
+        
+    # 4. ОБНОВИТЬ СКРИПТ baloon.gd (если ссылается на Normal 1.png)
+    - name: Fix script texture paths
+      run: |
+        if [ -f "baloon.gd" ]; then
+          # Заменить пути к текстурам в коде
+          sed -i 's/"res:\/\/Normal 1\.png"/"res:\/\/Normal1.png"/g' baloon.gd
+          sed -i 's/Normal 1\.png/Normal1.png/g' baloon.gd
+        fi
+        
+    # 5. ПЕРЕИМЕНОВАТЬ СЦЕНУ (node_2d.tscn → main.tscn)
+    - name: Prepare scene
+      run: |
+        if [ -f "node_2d.tscn" ]; then
+          cp node_2d.tscn main.tscn
+          # Исправить ссылки в сцене
+          sed -i 's/res:\/\/node_2d\.tscn/res:\/\/main\.tscn/g' main.tscn
+        else
+          # Создать простую сцену если нет
+          cat > main.tscn << 'EOF'
+          [gd_scene load_steps=2 format=3]
+          
+          [ext_resource type="Script" path="res://baloon.gd" id="1_balloon"]
+          
+          [node name="Balloon" type="Node2D"]
+          script = ExtResource("1_balloon")
+          EOF
+        fi
+        
+    # 6. СОЗДАТЬ ФАЙЛ ПРОЕКТА
+    - name: Create project config
+      run: |
         cat > project.godot << 'EOF'
         [application]
-        config/name="Ball Game"
-        config/icon="res://icon.svg"
+        config/name="Balloon Game"
+        run/main_scene="res://main.tscn"
         
         [rendering]
-        renderer/rendering_method="mobile"
+        renderer/rendering_method="gl_compatibility"
         
         [display]
         window/size/width=1920
         window/size/height=1080
         window/size/mode="fullscreen"
+        window/vsync/vsync_mode="enabled"
+        
+        [input]
+        ui_accept={"deadzone": 0.5, "events": [{"type": 1}]}
+        trigger_click={"deadzone": 0.5, "events": [{"type": 1}]}
+        
+        [android]
+        modules/org/godotengine/openxr/OpenXR="*"
         EOF
         
-    # 4. Создать простой скрипт если нет
-    - name: Create default script if missing
-      run: |
-        if [ ! -f "ball.gd" ]; then
-          cat > ball.gd << 'EOF'
-          extends Node2D
-          
-          var angle = 0.0
-          
-          func _ready():
-              print("Ball Game for Pico-4")
-              
-          func _process(delta):
-              angle += delta * 2
-              queue_redraw()
-              
-          func _draw():
-              var x = 400 + sin(angle) * 100
-              var y = 300 + cos(angle) * 100
-              draw_circle(Vector2(x, y), 50, Color.RED)
-          EOF
-        fi
+        # Создать иконку
+        cat > icon.svg << 'EOF'
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+          <circle cx="64" cy="64" r="60" fill="#4ecdc4"/>
+          <circle cx="48" cy="48" r="8" fill="#fff"/>
+          <circle cx="80" cy="48" r="8" fill="#fff"/>
+          <path d="M48 90 Q64 110 80 90" stroke="#fff" stroke-width="6" fill="none"/>
+        </svg>
+        EOF
         
-    # 5. Создать сцену если нет
-    - name: Create default scene if missing
-      run: |
-        if [ ! -f "ball.tscn" ]; then
-          cat > ball.tscn << 'EOF'
-          [gd_scene load_steps=2 format=3 uid="uid://test"]
-          
-          [ext_resource type="Script" path="res://ball.gd" id="1_ball"]
-          
-          [node name="Ball" type="Node2D"]
-          script = ExtResource("1_ball")
-          EOF
-        fi
-        
-    # 6. Создать настройки экспорта
+    # 7. СОЗДАТЬ НАСТРОЙКИ ЭКСПОРТА
     - name: Create export preset
       run: |
         cat > export_presets.cfg << 'EOF'
@@ -85,22 +110,27 @@ jobs:
         custom_template=""
         embedded_android_sdk=true
         architectures/arm64-v8a=true
+        architectures/armeabi-v7a=false
         
         [preset.0.options]
-        application/package="com.pico.ball"
+        application/package="com.pico.balloon"
         application/version="1"
         application/version_code="1"
-        XR/OpenXR/Enabled=true
+        application/icon="res://icon.svg"
+        application/xr_features/openxr=true
+        graphics/api=1
+        xr/openxr/enabled=true
+        xr/openxr/form_factor=1
         EOF
         
-    # 7. Собрать APK
+    # 8. СОБРАТЬ APK
     - name: Build APK
       run: |
-        ./Godot_v4.2.1-stable_linux.x86_64 --headless --export-release "Android" ball-game.apk
+        ./Godot_v4.1.3-stable_linux.x86_64 --headless --export-release "Android" balloon-pico.apk
         
-    # 8. Загрузить APK
+    # 9. ЗАГРУЗИТЬ APK
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: Ball-Game-APK
-        path: ball-game.apk
+        name: Balloon-Pico-APK
+        path: balloon-pico.apk
